@@ -10,16 +10,15 @@ import React, {
 export interface TransformResult {
   id: string;
   originalUri: string;
-  resultUri: string;
-  style: string;
-  styleLabel: string;
-  styleColor: string;
+  targetUri: string;
+  resultUrl: string;
   createdAt: number;
 }
 
 interface TransformContextType {
-  selectedPhoto: string | null;
-  setSelectedPhoto: (uri: string | null) => void;
+  sourcePhoto: string | null;
+  sourcePhotoBase64: string | null;
+  setSourcePhoto: (uri: string | null, base64: string | null) => void;
   history: TransformResult[];
   addToHistory: (result: TransformResult) => void;
   deleteFromHistory: (id: string) => void;
@@ -27,10 +26,11 @@ interface TransformContextType {
 
 const TransformContext = createContext<TransformContextType | null>(null);
 
-const HISTORY_KEY = "@remakeface_history_v1";
+const HISTORY_KEY = "@remakeface_faceswap_history_v2";
 
 export function TransformProvider({ children }: { children: React.ReactNode }) {
-  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [sourcePhoto, setSourcePhotoUri] = useState<string | null>(null);
+  const [sourcePhotoBase64, setSourcePhotoBase64] = useState<string | null>(null);
   const [history, setHistory] = useState<TransformResult[]>([]);
 
   useEffect(() => {
@@ -39,6 +39,11 @@ export function TransformProvider({ children }: { children: React.ReactNode }) {
         if (stored) setHistory(JSON.parse(stored));
       })
       .catch(() => {});
+  }, []);
+
+  const setSourcePhoto = useCallback((uri: string | null, base64: string | null) => {
+    setSourcePhotoUri(uri);
+    setSourcePhotoBase64(base64);
   }, []);
 
   const addToHistory = useCallback(async (result: TransformResult) => {
@@ -60,8 +65,9 @@ export function TransformProvider({ children }: { children: React.ReactNode }) {
   return (
     <TransformContext.Provider
       value={{
-        selectedPhoto,
-        setSelectedPhoto,
+        sourcePhoto,
+        sourcePhotoBase64,
+        setSourcePhoto,
         history,
         addToHistory,
         deleteFromHistory,
