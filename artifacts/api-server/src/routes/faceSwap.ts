@@ -3,8 +3,11 @@ import { Router, type IRouter } from "express";
 const router: IRouter = Router();
 
 const TOKEN = process.env.REPLICATE_API_TOKEN;
-const MODEL = "yan-ops/face-swap";
 const API_BASE = "https://api.replicate.com/v1";
+
+// cdingram/face-swap — verified working model
+// swap_image = source face (user selfie), input_image = target photo
+const MODEL_VERSION = "d1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111";
 
 type PredictionStatus = "starting" | "processing" | "succeeded" | "failed" | "canceled";
 
@@ -16,17 +19,18 @@ interface Prediction {
 }
 
 async function createPrediction(sourceImage: string, targetImage: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/models/${MODEL}/predictions`, {
+  const res = await fetch(`${API_BASE}/predictions`, {
     method: "POST",
     headers: {
       Authorization: `Token ${TOKEN}`,
       "Content-Type": "application/json",
-      Prefer: "wait=5",
+      Prefer: "wait=10",
     },
     body: JSON.stringify({
+      version: MODEL_VERSION,
       input: {
-        source_image: sourceImage,
-        target_image: targetImage,
+        swap_image: sourceImage,   // user's face
+        input_image: targetImage,  // target scene/person
       },
     }),
   });
