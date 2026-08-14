@@ -1,12 +1,16 @@
 import { Feather } from "@expo/vector-icons";
+import { File, Paths } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import * as MediaLibrary from "expo-media-library";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Animated,
+  Alert,
   GestureResponderEvent,
   Image,
+  Linking,
   Platform,
   Pressable,
   Share,
@@ -32,19 +36,23 @@ export default function ResultScreen() {
 
   const [sliderX, setSliderX] = useState(0.5);
   const [activeTab, setActiveTab] = useState<"compare" | "result">("result");
-  const containerWidth = useRef(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const containerWidthRef = useRef(0);
   const thumbScale = useRef(new Animated.Value(1)).current;
+  const [saving, setSaving] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   const handleContainerLayout = (e: { nativeEvent: { layout: { width: number } } }) => {
-    containerWidth.current = e.nativeEvent.layout.width;
+    const width = e.nativeEvent.layout.width;
+    containerWidthRef.current = width;
+    setContainerWidth(width);
   };
 
   const handlePanMove = (e: GestureResponderEvent) => {
-    if (!containerWidth.current) return;
-    const ratio = Math.max(0.05, Math.min(0.95, e.nativeEvent.locationX / containerWidth.current));
+    if (!containerWidthRef.current) return;
+    const ratio = Math.max(0.05, Math.min(0.95, e.nativeEvent.locationX / containerWidthRef.current));
     setSliderX(ratio);
   };
 
@@ -59,8 +67,48 @@ export default function ResultScreen() {
   const handleShare = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await Share.share({ message: "Check out my AI face swap made with RemakeFace AI! 🤖" });
+      await Share.share({
+        message: "Check out my AI face swap made with RemakeFace AI.",
+        url: resultUrl,
+      });
     } catch {}
+  };
+
+  const handleSave = async () => {
+    if (saving) return;
+    if (Platform.OS === "web") {
+      Alert.alert("Save from your device", "Use Share to save the result from a mobile device.");
+      return;
+    }
+    setSaving(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const permission = await MediaLibrary.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Photo access needed",
+          permission.canAskAgain
+            ? "Allow photo access to save your result."
+            : "Allow photo access in Settings to save your result.",
+          permission.canAskAgain
+            ? [{ text: "OK" }]
+            : [
+                { text: "Not now", style: "cancel" },
+                { text: "Open Settings", onPress: () => void Linking.openSettings() },
+              ],
+        );
+        return;
+      }
+
+      const destination = new File(Paths.cache, `remakeface-${Date.now()}.jpg`);
+      const download = await File.downloadFileAsync(resultUrl, destination);
+      await MediaLibrary.createAssetAsync(download.uri);
+      Alert.alert("Saved", "Your face swap is now in your photo library.");
+    } catch {
+      Alert.alert("Could not save", "Please try again in a moment.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!originalUri || !resultUrl) {
@@ -82,9 +130,9 @@ export default function ResultScreen() {
         <Pressable onPress={() => router.back()} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </Pressable>
-        <View style={[styles.successPill, { backgroundColor: "#22C55E20" }]}>
-          <Feather name="check-circle" size={12} color="#22C55E" />
-          <Text style={[styles.successText, { color: "#22C55E" }]}>Face Swap Complete</Text>
+        <View style={[styles.successPill, { backgroundColor: colors.successSoft }]}>
+          <Feather name="check-circle" size={12} color={colors.success} />
+          <Text style={[styles.successText, { color: colors.success }]}>Face Swap Complete</Text>
         </View>
         <Pressable onPress={handleShare} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
           <Feather name="share-2" size={20} color={colors.foreground} />
@@ -116,11 +164,11 @@ export default function ResultScreen() {
           <View style={styles.imageWrap}>
             <Image source={{ uri: resultUrl }} style={styles.fullImage} resizeMode="cover" />
             <LinearGradient
-              colors={["transparent", "#08080F"]}
+              colors={["transparent", colors.background]}
               style={styles.imageFade}
             />
             <View style={styles.resultBadge}>
-              <LinearGradient colors={["#7C3AED", "#EC4899"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.resultBadgeInner}>
+              <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.resultBadgeInner}>
                 <Feather name="zap" size={12} color="#fff" />
                 <Text style={styles.resultBadgeText}>AI Face Swap</Text>
               </LinearGradient>
@@ -138,7 +186,7 @@ export default function ResultScreen() {
             <View style={[styles.originalClip, { width: `${sliderX * 100}%` }]}>
               <Image
                 source={{ uri: originalUri }}
-                style={[styles.fullImageAbs, { width: containerWidth.current || ("100%" as any) }]}
+                style={[styles.fullImageAbs, { width: containerWidth || 1 }]}
                 resizeMode="cover"
               />
             </View>
@@ -186,12 +234,12 @@ export default function ResultScreen() {
         </Pressable>
 
         <Pressable
-          onPress={handleShare}
+          onPress={() => void handleSave()}
           style={({ pressed }) => [styles.primaryBtn, { opacity: pressed ? 0.8 : 1 }]}
         >
-          <LinearGradient colors={["#7C3AED", "#EC4899"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primaryBtnGrad}>
-            <Feather name="share-2" size={15} color="#fff" />
-            <Text style={styles.primaryBtnText}>Share</Text>
+          <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primaryBtnGrad}>
+            <Feather name="download" size={15} color="#fff" />
+            <Text style={styles.primaryBtnText}>{saving ? "Saving…" : "Save"}</Text>
           </LinearGradient>
         </Pressable>
       </View>

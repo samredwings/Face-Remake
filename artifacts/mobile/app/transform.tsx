@@ -7,6 +7,7 @@ import React, { useState } from "react";
 import {
   Alert,
   Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -22,7 +23,9 @@ import { useColors } from "@/hooks/useColors";
 
 const API_BASE =
   process.env.EXPO_PUBLIC_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    ? process.env.EXPO_PUBLIC_DOMAIN.startsWith("http")
+      ? process.env.EXPO_PUBLIC_DOMAIN
+      : `https://${process.env.EXPO_PUBLIC_DOMAIN}`
     : "";
 
 async function runFaceSwap(sourceBase64: string, targetBase64: string): Promise<string> {
@@ -32,13 +35,24 @@ async function runFaceSwap(sourceBase64: string, targetBase64: string): Promise<
     body: JSON.stringify({ sourceImage: sourceBase64, targetImage: targetBase64 }),
   });
 
-  const data = await res.json();
+  const data = (await res.json().catch(() => ({}))) as {
+    resultUrl?: string;
+    error?: string;
+    code?: string;
+  };
 
   if (!res.ok || data.error) {
+    if (data.code === "INSUFFICIENT_CREDIT") {
+      throw new Error("The AI service is temporarily unavailable. Please try again later.");
+    }
     throw new Error(data.error ?? `Server error ${res.status}`);
   }
 
-  return data.resultUrl as string;
+  if (!data.resultUrl) {
+    throw new Error("The AI service returned an empty result. Please try again.");
+  }
+
+  return data.resultUrl;
 }
 
 export default function TransformScreen() {
@@ -56,6 +70,17 @@ export default function TransformScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
+  const showPermissionAlert = (message: string, canAskAgain: boolean) => {
+    if (canAskAgain || Platform.OS === "web") {
+      Alert.alert("Permission needed", message);
+      return;
+    }
+    Alert.alert("Permission needed", message, [
+      { text: "Not now", style: "cancel" },
+      { text: "Open Settings", onPress: () => void Linking.openSettings() },
+    ]);
+  };
+
   const pickTarget = async (source: "gallery" | "camera") => {
     setPickingTarget(source);
     setError(null);
@@ -65,11 +90,17 @@ export default function TransformScreen() {
           Alert.alert("Not available", "Camera is not supported on web.");
           return;
         }
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== "granted") { Alert.alert("Permission needed", "Camera access required."); return; }
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (permission.status !== "granted") {
+          showPermissionAlert("Camera access is needed to take a target photo.", permission.canAskAgain);
+          return;
+        }
       } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") { Alert.alert("Permission needed", "Photo library access required."); return; }
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permission.status !== "granted") {
+          showPermissionAlert("Photo library access is needed to choose a target.", permission.canAskAgain);
+          return;
+        }
       }
 
       const fn = source === "camera"
@@ -85,9 +116,13 @@ export default function TransformScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const { uri, base64 } = result.assets[0];
+        if (!base64) {
+          setError("This photo could not be prepared. Please choose another image.");
+          return;
+        }
         Haptics.selectionAsync();
         setTargetUri(uri);
-        setTargetBase64(base64 ? `data:image/jpeg;base64,${base64}` : null);
+        setTargetBase64(`data:image/jpeg;base64,${base64}`);
       }
     } finally {
       setPickingTarget(null);
@@ -96,14 +131,17 @@ export default function TransformScreen() {
 
   const handleSwap = () => {
     if (!sourcePhotoBase64 || !targetBase64) return;
+    if (processing) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setError(null);
     setProcessing(true);
+    void handleProcessingComplete();
   };
 
   const handleProcessingComplete = async () => {
     if (!sourcePhoto || !sourcePhotoBase64 || !targetUri || !targetBase64) {
       setProcessing(false);
+      setError("Choose a target photo before starting the swap.");
       return;
     }
 
@@ -211,7 +249,13 @@ export default function TransformScreen() {
               )}
             </View>
             {targetUri ? (
-              <Pressable onPress={() => setTargetUri(null)} style={styles.photoWrapTouchable}>
+              <Pressable
+                onPress={() => {
+                  setTargetUri(null);
+                  setTargetBase64(null);
+                }}
+                style={styles.photoWrapTouchable}
+              >
                 <View style={[styles.photoWrap, { borderColor: "#7C3AED80" }]}>
                   <Image source={{ uri: targetUri }} style={styles.photo} resizeMode="cover" />
                   <View style={styles.changeOverlay}>
@@ -312,7 +356,7 @@ export default function TransformScreen() {
       <ProcessingOverlay
         visible={processing}
         styleName="Face Swap"
-        onComplete={handleProcessingComplete}
+          onComplete={() => undefined}
         isAsync
       />
     </View>

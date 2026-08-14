@@ -14,9 +14,16 @@
       "backgroundColor": "#08080F"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "RemakeFace AI uses the camera to capture face and target photos.",
+        "NSPhotoLibraryUsageDescription": "RemakeFace AI uses your photos to create face swaps.",
+        "NSPhotoLibraryAddUsageDescription": "RemakeFace AI saves finished face swaps to your photo library."
+      }
     },
-    "android": {},
+    "android": {
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES", "WRITE_EXTERNAL_STORAGE"]
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

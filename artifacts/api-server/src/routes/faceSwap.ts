@@ -18,6 +18,16 @@ interface Prediction {
   error?: string;
 }
 
+class ReplicateError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number,
+    public readonly code: "INSUFFICIENT_CREDIT" | "UPSTREAM_AUTH" | "UPSTREAM_ERROR",
+  ) {
+    super(message);
+  }
+}
+
 async function createPrediction(sourceImage: string, targetImage: string): Promise<string> {
   const res = await fetch(`${API_BASE}/predictions`, {
     method: "POST",
@@ -37,7 +47,25 @@ async function createPrediction(sourceImage: string, targetImage: string): Promi
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Replicate submit failed (${res.status}): ${body}`);
+    if (res.status === 402) {
+      throw new ReplicateError(
+        "The AI service needs billing enabled before it can create a face swap.",
+        402,
+        "INSUFFICIENT_CREDIT",
+      );
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new ReplicateError(
+        "The AI service is not authorized. Check the server configuration.",
+        502,
+        "UPSTREAM_AUTH",
+      );
+    }
+    throw new ReplicateError(
+      `The AI service could not start this swap (${res.status}).`,
+      502,
+      "UPSTREAM_ERROR",
+    );
   }
 
   const prediction = await res.json() as Prediction;
@@ -57,7 +85,16 @@ async function poll(id: string): Promise<string> {
       headers: { Authorization: `Token ${TOKEN}` },
     });
 
-    if (!res.ok) continue;
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        throw new ReplicateError(
+          "The AI service is not authorized. Check the server configuration.",
+          502,
+          "UPSTREAM_AUTH",
+        );
+      }
+      continue;
+    }
 
     const prediction = await res.json() as Prediction;
 
@@ -87,13 +124,19 @@ router.post("/face-swap", async (req, res) => {
     targetImage?: string;
   };
 
-  if (!sourceImage || !targetImage) {
-    res.status(400).json({ error: "sourceImage and targetImage are required" });
+  if (typeof sourceImage !== "string" || typeof targetImage !== "string") {
+    res.status(400).json({
+      error: "Choose both a face photo and a target photo before starting.",
+      code: "MISSING_IMAGES",
+    });
     return;
   }
 
   if (!TOKEN) {
-    res.status(500).json({ error: "REPLICATE_API_TOKEN is not configured" });
+    res.status(500).json({
+      error: "The AI service is not configured yet.",
+      code: "MISSING_CONFIGURATION",
+    });
     return;
   }
 
@@ -103,7 +146,14 @@ router.post("/face-swap", async (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Face swap failed";
     req.log.error({ err }, "face-swap error");
-    res.status(500).json({ error: message });
+    if (err instanceof ReplicateError) {
+      res.status(err.statusCode).json({ error: message, code: err.code });
+      return;
+    }
+    res.status(500).json({
+      error: "The face swap could not be completed. Please try again.",
+      code: "FACE_SWAP_FAILED",
+    });
   }
 });
 

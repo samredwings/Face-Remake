@@ -8,6 +8,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -94,15 +95,25 @@ export default function HomeScreen() {
           Alert.alert("Not available", "Camera is not supported on web. Use the gallery.");
           return;
         }
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert("Permission needed", "Camera access is required.");
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (permission.status !== "granted") {
+          Alert.alert("Permission needed", "Camera access is required.", [
+            { text: "Not now", style: "cancel" },
+            ...(permission.canAskAgain
+              ? []
+              : [{ text: "Open Settings", onPress: () => void Linking.openSettings() }]),
+          ]);
           return;
         }
       } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert("Permission needed", "Photo library access is required.");
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permission.status !== "granted") {
+          Alert.alert("Permission needed", "Photo library access is required.", [
+            { text: "Not now", style: "cancel" },
+            ...(permission.canAskAgain
+              ? []
+              : [{ text: "Open Settings", onPress: () => void Linking.openSettings() }]),
+          ]);
           return;
         }
       }
@@ -122,7 +133,11 @@ export default function HomeScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const { uri, base64 } = result.assets[0];
-        const dataUri = base64 ? `data:image/jpeg;base64,${base64}` : null;
+        if (!base64) {
+          Alert.alert("Photo unavailable", "This photo could not be prepared. Please choose another image.");
+          return;
+        }
+        const dataUri = `data:image/jpeg;base64,${base64}`;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setSourcePhoto(uri, dataUri);
         router.push("/transform");
@@ -158,8 +173,8 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <LinearGradient
-          colors={["#7C3AED22", "#EC489922"]}
+         <LinearGradient
+             colors={[`${colors.gradientStart}22`, `${colors.gradientEnd}22`]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.hero, { borderColor: "#7C3AED44" }]}
@@ -176,7 +191,7 @@ export default function HomeScreen() {
                 {step.label ? (
                   <View style={styles.heroStep}>
                     <LinearGradient
-                      colors={i === 4 ? ["#7C3AED", "#EC4899"] : ["#ffffff18", "#ffffff10"]}
+                       colors={i === 4 ? [colors.gradientStart, colors.gradientEnd] : ["#ffffff18", "#ffffff10"]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.heroStepIcon}
@@ -194,11 +209,11 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <Text style={[styles.heroTitle, { color: colors.foreground }]}>
-            Pick your face photo{"\n"}to get started
+           <Text style={[styles.heroTitle, { color: colors.foreground }]}>
+             Put yourself{"\n"}anywhere
           </Text>
           <Text style={[styles.heroSub, { color: colors.mutedForeground }]}>
-            Then choose any target image — AI swaps your face in with hyper-realistic results.
+             Choose a face photo, add a target scene, and let AI create the believable blend.
           </Text>
 
           <View style={styles.pickRow}>
@@ -207,7 +222,7 @@ export default function HomeScreen() {
               disabled={!!picking}
               style={({ pressed }) => [styles.pickBtn, { opacity: pressed || picking === "gallery" ? 0.7 : 1 }]}
             >
-              <LinearGradient colors={["#7C3AED", "#EC4899"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.pickBtnInner}>
+               <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.pickBtnInner}>
                 <Feather name="image" size={18} color="#fff" />
                 <Text style={styles.pickBtnText}>{picking === "gallery" ? "Opening…" : "Gallery"}</Text>
               </LinearGradient>

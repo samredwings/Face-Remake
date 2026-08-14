@@ -23,6 +23,10 @@ const colors = {
 
     destructive: "#EF4444",
     destructiveForeground: "#ffffff",
+    success: "#22C55E",
+    successSoft: "#22C55E20",
+    warning: "#F59E0B",
+    warningSoft: "#F59E0B20",
 
     border: "#2A2A50",
     input: "#2A2A50",
