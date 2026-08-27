@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTransform, type TransformResult } from "@/context/TransformContext";
 import { useColors } from "@/hooks/useColors";
 
-function HistoryCard({
+const HistoryCard = React.memo(function HistoryCard({
   item,
   onDelete,
 }: {
@@ -75,14 +75,32 @@ function HistoryCard({
       )}
     </Pressable>
   );
-}
+});
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { setSourcePhoto, history, deleteFromHistory } = useTransform();
+  const { setSourcePhoto, history, historyReady, deleteFromHistory } = useTransform();
   const [picking, setPicking] = useState<"gallery" | "camera" | null>(null);
+  const [historyVisible, setHistoryVisible] = useState(Platform.OS !== "web");
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || !historyReady) return;
+
+    const browserWindow = globalThis as typeof globalThis & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    if (browserWindow.requestIdleCallback) {
+      const handle = browserWindow.requestIdleCallback(() => setHistoryVisible(true), { timeout: 800 });
+      return () => browserWindow.cancelIdleCallback?.(handle);
+    }
+
+    const handle = setTimeout(() => setHistoryVisible(true), 0);
+    return () => clearTimeout(handle);
+  }, [historyReady]);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
@@ -244,7 +262,7 @@ export default function HomeScreen() {
           </View>
         </LinearGradient>
 
-        {history.length > 0 && (
+        {historyReady && historyVisible && history.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionRow}>
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent swaps</Text>
@@ -257,6 +275,10 @@ export default function HomeScreen() {
               keyExtractor={(item) => item.id}
               numColumns={2}
               scrollEnabled={false}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={3}
+              removeClippedSubviews={Platform.OS !== "web"}
               columnWrapperStyle={{ gap: 8 }}
               ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
               renderItem={({ item }) => (
@@ -268,7 +290,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {history.length === 0 && (
+        {historyReady && historyVisible && history.length === 0 && (
           <View style={styles.empty}>
             <View style={[styles.emptyIcon, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Feather name="layers" size={28} color={colors.mutedForeground} />
@@ -278,6 +300,9 @@ export default function HomeScreen() {
               Pick a photo above to run your first AI face swap.
             </Text>
           </View>
+        )}
+        {(!historyReady || !historyVisible) && (
+          <View style={styles.historyLoading} accessibilityLabel="Loading recent swaps" />
         )}
       </ScrollView>
     </View>
@@ -321,4 +346,5 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 72, height: 72, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", marginBottom: 6 },
   emptyDesc: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20 },
+  historyLoading: { minHeight: 112 },
 });

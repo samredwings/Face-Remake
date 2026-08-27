@@ -20,6 +20,7 @@ interface TransformContextType {
   sourcePhotoBase64: string | null;
   setSourcePhoto: (uri: string | null, base64: string | null) => void;
   history: TransformResult[];
+  historyReady: boolean;
   addToHistory: (result: TransformResult) => void;
   deleteFromHistory: (id: string) => void;
 }
@@ -32,13 +33,15 @@ export function TransformProvider({ children }: { children: React.ReactNode }) {
   const [sourcePhoto, setSourcePhotoUri] = useState<string | null>(null);
   const [sourcePhotoBase64, setSourcePhotoBase64] = useState<string | null>(null);
   const [history, setHistory] = useState<TransformResult[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(HISTORY_KEY)
       .then((stored) => {
         if (stored) setHistory(JSON.parse(stored));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setHistoryReady(true));
   }, []);
 
   const setSourcePhoto = useCallback((uri: string | null, base64: string | null) => {
@@ -69,6 +72,7 @@ export function TransformProvider({ children }: { children: React.ReactNode }) {
         sourcePhotoBase64,
         setSourcePhoto,
         history,
+        historyReady,
         addToHistory,
         deleteFromHistory,
       }}
