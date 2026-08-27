@@ -159,8 +159,13 @@ overrides:
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.28.1"
   # Security fixes for transitive dependency vulnerabilities (pinned to minimal patched versions)
+  # Keep brace-expansion on its existing major lines for minimatch compatibility.
+  "brace-expansion@1.1.15": "1.1.18"
+  "brace-expansion@2.1.1": "2.1.4"
+  "brace-expansion@5.0.6": "5.0.9"
+  "image-size": "file:./vendor/image-size-safe"
   qs: "6.15.2"
-  js-yaml: "4.2.0"
+  js-yaml: "4.3.1"
   markdown-it: "14.2.0"
   postcss: "8.5.15"
   uuid: "11.1.1"
