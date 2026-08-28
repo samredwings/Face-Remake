@@ -43,7 +43,9 @@ async function runFaceSwap(sourceBase64: string, targetBase64: string): Promise<
 
   if (!res.ok || data.error) {
     if (data.code === "INSUFFICIENT_CREDIT") {
-      throw new Error("The AI service is temporarily unavailable. Please try again later.");
+      throw new Error(
+        "Face swaps need billing enabled for the connected Replicate account. Enable billing, then try again.",
+      );
     }
     throw new Error(data.error ?? `Server error ${res.status}`);
   }
